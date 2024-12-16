@@ -292,5 +292,11 @@ defmodule Nosedrum.ApplicationCommand do
   """
   @callback command(interaction :: Interaction.t()) :: response
 
-  @optional_callbacks [options: 0]
+  @doc """
+  Optionally specify the contexts where this command can be used.
+  Valid values are: ["GUILD", "DM"]
+  """
+  @callback contexts() :: [String.t()]
+
+  @optional_callbacks [options: 0, contexts: 0]
 end

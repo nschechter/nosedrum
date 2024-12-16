@@ -225,11 +225,18 @@ defmodule Nosedrum.Storage.Dispatcher do
         []
       end
 
-    %{
+    contexts =
+      if function_exported?(command, :contexts, 0) do
+        command.contexts()
+      end
+
+    base_payload = %{
       type: parse_type(command.type()),
       name: name
     }
-    |> put_type_specific_fields(command, options)
+    |> maybe_put(:contexts, contexts)
+
+    put_type_specific_fields(base_payload, command, options)
   end
 
   # This seems like a hacky way to unwrap the outer list...
@@ -318,4 +325,8 @@ defmodule Nosedrum.Storage.Dispatcher do
       payload
     end
   end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
 end
