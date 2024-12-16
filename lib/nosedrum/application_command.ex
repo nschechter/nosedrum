@@ -217,6 +217,16 @@ defmodule Nosedrum.ApplicationCommand do
           value: String.t() | number()
         }
 
+
+  @typedoc """
+  Valid contexts where a command can be used.
+  - `:guild` - Can be used in servers (0)
+  - `:bot_dm` - Can be used in DMs with the bot user (1)
+  - `:private_channel` - Can be used in Group DMs and other DMs (2)
+  """
+  @type context :: :guild | :bot_dm | :private_channel
+
+
   @doc """
   Returns one of `:slash`, `:message`, or `:user`, indicating what kind of application command this module represents.
   """
@@ -294,9 +304,21 @@ defmodule Nosedrum.ApplicationCommand do
 
   @doc """
   Optionally specify the contexts where this command can be used.
-  Valid values are: ["GUILD", "DM"]
+  Returns a list of contexts where the command should be available.
+
+  ## Example
+      @impl true
+      def contexts(), do: [:guild, :bot_dm]  # Available in servers and DMs with the bot
+
+      @impl true
+      def contexts(), do: [:private_channel] # Only available in group DMs and other DMs
+
+      @impl true
+      def contexts(), do: [:guild, :bot_dm, :private_channel] # Available everywhere
+
+  See `t:context/0` for all valid context values.
   """
-  @callback contexts() :: [String.t()]
+  @callback contexts() :: [context()]
 
   @optional_callbacks [options: 0, contexts: 0]
 end
