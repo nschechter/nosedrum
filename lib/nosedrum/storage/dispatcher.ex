@@ -23,6 +23,12 @@ defmodule Nosedrum.Storage.Dispatcher do
     number: 10
   }
 
+  @context_type_map %{
+    guild: 0,
+    bot_dm: 1,
+    private: 2,
+  }
+
   ## Api
   def start_link(opts) do
     GenServer.start_link(__MODULE__, %{}, name: Keyword.get(opts, :name, __MODULE__))
@@ -228,6 +234,8 @@ defmodule Nosedrum.Storage.Dispatcher do
     contexts =
       if function_exported?(command, :contexts, 0) do
         command.contexts()
+        |> List.wrap()
+        |> Enum.map(&Map.fetch!(@context_type_map, &1))
       end
 
     base_payload = %{
