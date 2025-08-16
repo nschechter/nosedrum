@@ -247,7 +247,7 @@ defmodule Nosedrum.Storage.Dispatcher do
       }
       |> maybe_put(:contexts, contexts)
 
-    base_payload =
+    payload = base_payload
       |> put_type_specific_fields(command, options)
       |> apply_payload_updates(command)
 
