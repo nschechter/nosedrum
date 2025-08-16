@@ -10,6 +10,8 @@ defmodule Nosedrum.Storage do
   or `c:remove_command/4` is called.
   """
   @moduledoc since: "0.4.0"
+
+  alias Nostrum.Api
   alias Nostrum.Struct.{Guild, Interaction}
 
   @callback_type_map %{
@@ -18,7 +20,9 @@ defmodule Nosedrum.Storage do
     deferred_channel_message_with_source: 5,
     deferred_update_message: 6,
     update_message: 7,
-    application_command_autocomplete_result: 8
+    application_command_autocomplete_result: 8,
+    modal: 9,
+    premium_required: 10
   }
 
   @flag_map %{
@@ -164,7 +168,16 @@ defmodule Nosedrum.Storage do
 
     data =
       command_response
-      |> Keyword.take([:content, :embeds, :components, :choices, :tts?, :allowed_mentions])
+      |> Keyword.take([
+        :content,
+        :embeds,
+        :components,
+        :choices,
+        :tts?,
+        :allowed_mentions,
+        :custom_id,
+        :title
+      ])
       |> Map.new()
       |> put_flags(command_response)
 
@@ -200,14 +213,18 @@ defmodule Nosedrum.Storage do
       |> Keyword.take([:content, :embeds, :components, :allowed_mentions])
       |> Map.new()
 
-    Nostrum.Api.edit_interaction_response(interaction, data)
+    Api.Interaction.edit_response(interaction, data)
   end
 
   defp convert_callback_type({type, _fn}) do
     convert_callback_type(type)
   end
 
-  defp convert_callback_type(type) do
+  defp convert_callback_type(type) when is_integer(type) do
+    type
+  end
+
+  defp convert_callback_type(type) when is_atom(type) do
     Map.get(@callback_type_map, type)
   end
 

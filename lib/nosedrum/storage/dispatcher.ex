@@ -8,6 +8,7 @@ defmodule Nosedrum.Storage.Dispatcher do
   use GenServer
 
   alias Nosedrum.Storage
+  alias Nostrum.Api.ApplicationCommand
   alias Nostrum.Struct.Interaction
 
   @option_type_map %{
@@ -20,7 +21,8 @@ defmodule Nosedrum.Storage.Dispatcher do
     channel: 7,
     role: 8,
     mentionable: 9,
-    number: 10
+    number: 10,
+    attachment: 11
   }
 
   @context_type_map %{
@@ -46,7 +48,7 @@ defmodule Nosedrum.Storage.Dispatcher do
         {:error, :unknown_command}
 
       # the response type was not a callback tuple, no need to follow up
-      res_type when is_atom(res_type) ->
+      res_type when is_atom(res_type) or is_integer(res_type) ->
         {:ok}
 
       {:error, reason} ->
@@ -108,7 +110,7 @@ defmodule Nosedrum.Storage.Dispatcher do
         build_payload(p, c)
       end)
 
-    case Nostrum.Api.bulk_overwrite_global_application_commands(command_list) do
+    case ApplicationCommand.bulk_overwrite_global_commands(command_list) do
       {:ok, _} = response ->
         {:reply, response, commands}
 
@@ -123,7 +125,7 @@ defmodule Nosedrum.Storage.Dispatcher do
         build_payload(p, c)
       end)
 
-    case Nostrum.Api.bulk_overwrite_guild_application_commands(guild_id, command_list) do
+    case ApplicationCommand.bulk_overwrite_guild_commands(guild_id, command_list) do
       {:ok, _} = response ->
         {:reply, response, commands}
 
@@ -139,7 +141,7 @@ defmodule Nosedrum.Storage.Dispatcher do
 
   @impl true
   def handle_call({:add, payload, name, command, :global}, _from, commands) do
-    case Nostrum.Api.create_global_application_command(payload) do
+    case ApplicationCommand.create_global_command(payload) do
       {:ok, _} = response ->
         {:reply, response, Map.put(commands, name, command)}
 
@@ -153,7 +155,7 @@ defmodule Nosedrum.Storage.Dispatcher do
       when is_list(guild_id_list) do
     res =
       Enum.reduce(guild_id_list, {[], []}, fn guild_id, {errors, responses} ->
-        case Nostrum.Api.create_guild_application_command(guild_id, payload) do
+        case ApplicationCommand.create_guild_command(guild_id, payload) do
           {:ok, _} = response ->
             {errors, [response | responses]}
 
@@ -167,7 +169,7 @@ defmodule Nosedrum.Storage.Dispatcher do
 
   @impl true
   def handle_call({:add, payload, name, command, guild_id}, _from, commands) do
-    case Nostrum.Api.create_guild_application_command(guild_id, payload) do
+    case ApplicationCommand.create_guild_command(guild_id, payload) do
       {:ok, _} = response ->
         {:reply, response, Map.put(commands, name, command)}
 
@@ -178,7 +180,7 @@ defmodule Nosedrum.Storage.Dispatcher do
 
   @impl true
   def handle_call({:remove, name, command_id, :global}, _from, commands) do
-    case Nostrum.Api.delete_global_application_command(command_id) do
+    case ApplicationCommand.delete_global_command(command_id) do
       {:ok} = response ->
         {:reply, response, Map.delete(commands, name)}
 
@@ -192,7 +194,7 @@ defmodule Nosedrum.Storage.Dispatcher do
       when is_list(guild_id_list) do
     res =
       Enum.reduce(guild_id_list, {[], []}, fn guild_id, {errors, responses} ->
-        case Nostrum.Api.delete_guild_application_command(guild_id, command_id) do
+        case ApplicationCommand.delete_guild_command(guild_id, command_id) do
           {:ok} ->
             {errors, [:ok | responses]}
 
@@ -206,7 +208,7 @@ defmodule Nosedrum.Storage.Dispatcher do
 
   @impl true
   def handle_call({:remove, name, command_id, guild_id}, _from, commands) do
-    case Nostrum.Api.delete_guild_application_command(guild_id, command_id) do
+    case ApplicationCommand.delete_guild_command(guild_id, command_id) do
       {:ok} = response ->
         {:reply, response, Map.delete(commands, name)}
 
@@ -238,13 +240,22 @@ defmodule Nosedrum.Storage.Dispatcher do
         |> Enum.map(&Map.fetch!(@context_type_map, &1))
       end
 
-    base_payload = %{
-      type: parse_type(command.type()),
-      name: name
-    }
-    |> maybe_put(:contexts, contexts)
+    base_payload =
+      %{
+        type: parse_type(command.type()),
+        name: name
+      }
+      |> maybe_put(:contexts, contexts)
 
-    put_type_specific_fields(base_payload, command, options)
+    base_payload =
+      |> put_type_specific_fields(command, options)
+      |> apply_payload_updates(command)
+
+    if function_exported?(command, :default_member_permissions, 0) do
+      Map.put(payload, :default_member_permissions, command.default_member_permissions())
+    else
+      payload
+    end
   end
 
   # This seems like a hacky way to unwrap the outer list...
@@ -307,6 +318,14 @@ defmodule Nosedrum.Storage.Dispatcher do
     end)
   end
 
+  defp apply_payload_updates(payload, command) do
+    if function_exported?(command, :update_command_payload, 1) do
+      command.update_command_payload(payload)
+    else
+      payload
+    end
+  end
+
   defp get_depth(path, depth) do
     Enum.reduce(path, 0, fn
       {_key, map}, cur_max when is_list(map) ->
@@ -324,6 +343,9 @@ defmodule Nosedrum.Storage.Dispatcher do
   defp unwrap_key({{key, _}, _}), do: key
   defp unwrap_key({key, _}), do: key
 
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
   defp put_type_specific_fields(payload, command, options) do
     if command.type() == :slash do
       payload
@@ -333,8 +355,4 @@ defmodule Nosedrum.Storage.Dispatcher do
       payload
     end
   end
-
-  defp maybe_put(map, _key, nil), do: map
-  defp maybe_put(map, key, value), do: Map.put(map, key, value)
-
 end

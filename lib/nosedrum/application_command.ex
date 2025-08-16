@@ -106,6 +106,9 @@ defmodule Nosedrum.ApplicationCommand do
   @typedoc """
   A value of the `:type` field in a `c:command/1` return value. See
   `t:response/0` for more details.
+
+  It is also possible to directly use the integer response type directly
+  if necessary. The list of allowed types can be found [here](https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-response-object-interaction-callback-type).
   """
   @type response_type ::
           :channel_message_with_source
@@ -116,6 +119,11 @@ defmodule Nosedrum.ApplicationCommand do
           | {:deferred_update_message, callback()}
           | :pong
           | :update_message
+          | :application_command_autocomplete_result
+          | :modal
+          | :premium_required
+          | integer()
+          | {integer(), callback()}
 
   @typedoc """
   A field in a keyword list interaction response.
@@ -283,6 +291,18 @@ defmodule Nosedrum.ApplicationCommand do
   @callback options() :: [option]
 
   @doc """
+    An optional callback that returns a bitset for the required default permissions to run this command.
+
+    Example callback that requires that the user has the permission to ban members to be able to see and execute this command
+
+    ```elixir
+    def default_member_permissions, do:
+      Nostrum.Permission.to_bitset([:ban_members])
+    ```
+  """
+  @callback default_member_permissions() :: String.t()
+
+  @doc """
   Execute the command invoked by the given `t:Nostrum.Struct.Interaction.t/0`. Returns a `t:response/0`
 
   ## Example
@@ -307,18 +327,27 @@ defmodule Nosedrum.ApplicationCommand do
   Returns a list of contexts where the command should be available.
 
   ## Example
-      @impl true
-      def contexts(), do: [:guild, :bot_dm]  # Available in servers and DMs with the bot
+  ```elixir
+    @impl true
+    def contexts(), do: [:guild, :bot_dm]  # Available in servers and DMs with the bot
 
-      @impl true
-      def contexts(), do: [:private_channel] # Only available in group DMs and other DMs
+    @impl true
+    def contexts(), do: [:private_channel] # Only available in group DMs and other DMs
 
-      @impl true
-      def contexts(), do: [:guild, :bot_dm, :private_channel] # Available everywhere
+    @impl true
+    def contexts(), do: [:guild, :bot_dm, :private_channel] # Available everywhere
+  ```
 
   See `t:context/0` for all valid context values.
   """
   @callback contexts() :: [context()]
 
-  @optional_callbacks [options: 0, contexts: 0]
+  @doc """
+  Make adjustments to the payload before creating the command with
+  `Nostrum.Api.create_global_application_command/2` or
+  `Nostrum.Api.create_guild_application_command/3`
+  """
+  @callback update_command_payload(map) :: map
+
+  @optional_callbacks [options: 0, contexts: 0, default_member_permissions: 0, update_command_payload: 1]
 end
